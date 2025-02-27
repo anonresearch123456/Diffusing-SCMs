@@ -1,0 +1,80 @@
+defaults:
+  - _self_
+  # - override hydra/launcher: joblib
+
+data_type: simulation
+debiasing_method: standard
+
+data:
+  datamodule:
+    _target_: src.data.simulation_data.SimDataModule
+    data_dir: .../sim_data
+    num_workers: 8
+    batch_size: 256
+
+experiment_dir: simulation/${debiasing_method}/${data_type}/${predictor.pred_head}/target_${predictor.target}/in_channels_${predictor.resnet_cfg.in_channels}_n_outputs_${predictor.resnet_cfg.n_outputs}_n_blocks_${predictor.resnet_cfg.n_blocks}_n_basefilters_${predictor.resnet_cfg.n_basefilters}_lr_start_${predictor.lr_start}_lr_end_${predictor.lr_end}
+
+hydra:
+  # launcher:
+  #   n_jobs: 1  # Sequential execution but isolated processes
+  #   backend: multiprocessing
+  #   prefer: processes
+  job:
+    chdir: True
+  sweep:
+    dir: results/simulation/standard/
+    subdir: ${experiment_dir}/${hydra.job.id}
+  sweeper:
+    params:
+      +predictor.target: label
+      +predictor.lr_start: 0.001
+      +predictor.lr_end: 1e-08
+      +predictor.resnet_cfg.n_basefilters: 8
+
+seed: 3169
+
+predictor:
+  encoder_type: resnet
+  pred_head: non-linear
+  resnet_cfg:
+    in_channels: 1
+    n_outputs: 1
+    n_blocks: 4
+    bn_momentum: 0.1
+    # n_basefilters: 16
+    dropout_p: 0.05
+    no_pooling: True
+
+trainer:
+  _target_: pytorch_lightning.Trainer
+  accelerator: gpu
+  devices: 1
+  max_epochs: 100
+  enable_progress_bar: True
+  detect_anomaly: False
+  log_every_n_steps: 1
+  enable_checkpointing: true
+  limit_train_batches: 1.0
+  limit_val_batches: 1.0
+
+callbacks:
+  model_checkpoint:
+    _target_: pytorch_lightning.callbacks.ModelCheckpoint
+    monitor: val/loss
+    mode: min
+    save_top_k: 1
+    dirpath: chkpts
+    filename: "epoch-{epoch}-val_loss-{val/loss:.4f}"
+    verbose: True
+    save_last: True
+    auto_insert_metric_name: False
+  learning_rate_monitor:
+    _target_: pytorch_lightning.callbacks.LearningRateMonitor
+    logging_interval: 'epoch'
+
+logger:
+  wandb:
+    _target_: pytorch_lightning.loggers.WandbLogger
+    project: "..."
+    name: "${experiment_dir}"
+    offline: False

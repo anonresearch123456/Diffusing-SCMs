@@ -1,0 +1,95 @@
+defaults:
+  - _self_
+  # - override hydra/launcher: joblib
+
+# used to calculate class weights for balanced cross entropy: no need to use it as no benefit was observed
+csv_path: .../final_data.csv
+class_weighted: False
+
+data_type: original
+
+data:
+  datamodule:
+    _target_: src.data.ukbdata.UKBDataModule
+    data_dir: .../orig_scans.h5
+    split_file: .../ukb_splits_final.json
+    batch_size: 64
+    num_workers: 4
+    model_type: predictmeta
+    p_flip: 0.3
+    p_shift: 0.3
+    p_affine: 0.3
+    p_contrast: 0.3
+    crop_images: True
+
+encoder_name: no_enc
+experiment_dir: predict_meta_all/new_setup/${data_type}/${predictor.predictor_backbone}/no_pooling_${predictor.resnet_cfg.no_pooling}/target_${predictor.target}/class_weighted_${class_weighted}/${encoder_name}/${predictor.predictor_type}/in_channels_${predictor.resnet_cfg.in_channels}_n_outputs_${predictor.resnet_cfg.n_outputs}_n_blocks_${predictor.resnet_cfg.n_blocks}_n_basefilters_${predictor.resnet_cfg.n_basefilters}_lr_start_${predictor.lr_start}_lr_end_${predictor.lr_end}
+
+hydra:
+  # launcher:
+  #   n_jobs: 1  # Sequential execution but isolated processes
+  #   backend: multiprocessing
+  #   prefer: processes
+  run:
+    dir: results/${experiment_dir}
+  job:
+    chdir: True
+  sweep:
+    dir: results
+    subdir: ${experiment_dir}
+  sweeper:
+    params:
+      +predictor.target: all
+      +predictor.lr_start: 0.0001
+      +predictor.lr_end: 1e-08
+      +predictor.resnet_cfg.n_basefilters: 32
+      +predictor.lambda_age: 1.0
+      +predictor.lambda_sex: 1.0
+      +predictor.lambda_site: 1.0
+
+seed: 3169
+
+predictor:
+  resnet_cfg:
+    in_channels: 1
+    n_outputs: 1
+    n_blocks: 4
+    # bn_momentum: 0.1
+    # n_basefilters: 16
+    # dropout_p: 0.05
+    no_pooling: true
+  # lr: 0.0001
+  predictor_type: pristine
+  predictor_backbone: resnet_gn
+
+trainer:
+  _target_: pytorch_lightning.Trainer
+  accelerator: gpu
+  devices: 1
+  max_epochs: 100
+  enable_progress_bar: True
+  detect_anomaly: False
+  log_every_n_steps: 1
+  enable_checkpointing: true
+
+callbacks:
+  model_checkpoint:
+    _target_: pytorch_lightning.callbacks.ModelCheckpoint
+    monitor: val/loss
+    mode: min
+    save_top_k: 1
+    dirpath: chkpts
+    filename: "epoch-{epoch}-val_loss-{val/loss:.4f}"
+    verbose: True
+    save_last: True
+    auto_insert_metric_name: False
+  learning_rate_monitor:
+    _target_: pytorch_lightning.callbacks.LearningRateMonitor
+    logging_interval: 'epoch'
+
+logger:
+  wandb:
+    _target_: pytorch_lightning.loggers.WandbLogger
+    project: "..."
+    name: "${experiment_dir}"
+    offline: False

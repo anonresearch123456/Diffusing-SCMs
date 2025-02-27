@@ -1,0 +1,59 @@
+defaults:
+  - _self_
+
+### Experiment Details ###
+path_to_data: ...
+new_out_dir: ...
+new_out_h5_name: "cf_data.h5"
+
+# guidance_scale: 0.1
+
+age_scale: 1.0
+sex_scale: 1.0
+site_scale: 1.0
+
+# this can be either original or SCM
+sample_type: original
+
+# can be a dict with keys or none
+SCM: null
+
+### Data Details - adjust on HPC-Cluster or Own Servers###
+original_csv_path: "some_path/file.csv"
+diffusion:
+  cfg_path: ".../.hydra/config.yaml"
+  checkpoint_path: ".../chkpts/last.ckpt"
+
+encoder:
+  cfg_path: ".../.hydra/config.yaml"
+  checkpoint_path: ".../chkpts/epoch-18-val_loss-0.0155.ckpt"
+
+classifier:
+  cfg_path: ".../.hydra/config.yaml"
+  checkpoint_path: ".../chkpts/last.ckpt"
+
+### Data Generation Details ###
+scheduler:
+  timesteps: 50
+
+
+### Hydra Job Details ###
+hydra:
+  run:
+    dir: diffusion_data/${new_out_dir}/
+  job:
+    chdir: True
+  sweep:
+    dir: diffusion_data
+    subdir: ${new_out_dir}
+  sweeper:
+    params:
+      +guidance_scale: 0.5
+
+test_ratio: 0.15
+val_ratio: 0.15
+
+columns_to_vary: ["Age_true", "Site_true"]  # or ["Age_true"]
+age_range: [50, 80]
+n_cfs: 4
+n_samples: 300

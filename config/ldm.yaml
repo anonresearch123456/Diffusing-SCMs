@@ -1,0 +1,81 @@
+# ldm.yaml
+defaults:
+  - _self_
+
+checkpoint_path: null
+
+data:
+  datamodule:
+    _target_: src.data.ukbdata.UKBDataModule
+    data_dir: .../orig_scans.h5
+    split_file: .../ukb_splits_final.json
+    batch_size: 3
+    num_workers: 4
+    model_type: diffusion
+    crop_images: True
+
+experiment_dir: ldm/padding_${ldm.padding}/res_blocks_${ldm.diffusion.num_res_blocks}_channels_${ldm.diffusion.num_channels}_attention_${ldm.diffusion.attention_levels}_base_lr_${ldm.base_lr}_sf_${ldm.scale_factor}_beta_${ldm.scheduler.beta_start}_${ldm.scheduler.beta_end}_pred_${ldm.scheduler.prediction_type}_tabular_${ldm.tabular_encoder.hidden_dim}_${ldm.tabular_encoder.output_dim}
+
+hydra:
+  run:
+    dir: results/${experiment_dir}
+  job:
+    chdir: True
+  sweep:
+    dir: results
+    subdir: ${experiment_dir}
+
+seed: 4231
+
+autoencoder:
+  cfg_path: ".../.hydra/config.yaml"
+  checkpoint_path: ".../last.ckpt"
+
+ldm:
+  _target_: src.models.lightningmodules.diffusion.LDMModule
+  scale_factor: 0.3
+  base_lr: 0.000025
+  padding: True
+  concat_cond: True
+  cross_cond: True
+  diffusion:
+    _target_: generative.networks.nets.DiffusionModelUNet
+    spatial_dims: 3
+    in_channels: 37
+    out_channels: 32
+    num_res_blocks: 2
+    with_conditioning: ${ldm.cross_cond}
+    num_channels: [256, 512, 768]
+    attention_levels: [False, True, True]
+    cross_attention_dim: 256
+    num_head_channels: [0, 512, 768]
+  scheduler:
+    _target_: generative.networks.schedulers.DDPMScheduler
+    schedule: "scaled_linear_beta"
+    num_train_timesteps: 1000
+    beta_start: 0.0001
+    beta_end: 0.02
+    prediction_type: "v_prediction"
+  tabular_encoder:
+    _target_: src.models.lightningmodules.diffusion.TabularEncoder
+    input_dim: 5
+    hidden_dim: 256
+    output_dim: 256
+    non_linear: False
+
+trainer:
+  _target_: pytorch_lightning.Trainer
+  accelerator: gpu
+  devices: 1
+  max_epochs: 25
+  enable_progress_bar: True
+  detect_anomaly: True
+  log_every_n_steps: 1
+  enable_checkpointing: False
+
+logger:
+  wandb:
+    _target_: pytorch_lightning.loggers.WandbLogger
+    project: "..."
+    name: "${experiment_dir}"
+    offline: False
