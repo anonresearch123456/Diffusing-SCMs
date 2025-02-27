@@ -1,2 +1,2 @@
-# Latent-Brain-Sim
-Simulating Brain Data
+# Diffusing SCMs
+Simulating Brain Data for bias mitigation evaluation.
